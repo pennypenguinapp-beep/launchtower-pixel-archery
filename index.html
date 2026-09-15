@@ -190,6 +190,40 @@
     pointer-events: none;
   }
   #toast.show { opacity: 1; }
+  #card .keys {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  #card button {
+    font-size: 18px;
+    padding: 14px 34px;
+  }
+  #pauseOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,12,18,.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9;
+  }
+  #pauseOverlay.show { display: flex; }
+  #pauseCard {
+    background: var(--panel);
+    border: 1px solid #2f3849;
+    border-radius: 10px;
+    padding: 24px 34px;
+    text-align: center;
+  }
+  #pauseCard h2 {
+    color: var(--accent);
+    letter-spacing: 3px;
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  #pauseCard p { color: var(--muted); font-size: 13px; letter-spacing: 1px; }
   #toast.bull { color: var(--accent); border-color: var(--accent); }
   #toast.good { color: var(--good); }
   #toast.miss { color: var(--bad); }
@@ -205,19 +239,26 @@
   </div>
   <div id="canvasWrap"><canvas id="c"></canvas></div>
   <div id="bottombar">
-    <div id="hint">DRAG FROM THE ARCHER TO AIM &amp; SET POWER, RELEASE TO FIRE</div>
+    <div id="hint">DRAG FROM THE ARCHER TO AIM &amp; SET POWER · SPACE = QUICK SHOT · P = PAUSE</div>
     <button id="fireBtn">NEW ROUND</button>
   </div>
 </div>
 <div id="toast"></div>
 <div id="overlay">
   <div id="card">
-    <h1>PIXEL ARCHERY</h1>
-    <p>Drag from the archer to draw the bow. Longer drag = more power.<br>
-    Watch the wind — it bends every arrow in flight.<br>
-    10 arrows per round. Bullseye = 50 pts, ring = 30, outer = 15.</p>
+    <h1 id="cardTitle">PIXEL ARCHERY</h1>
+    <p id="cardSub">Drag from the archer to draw the bow — longer drag = more power.<br>
+    Watch the wind, it bends every arrow in flight.<br>
+    10 arrows per round. Bullseye 50 · ring 30 · outer 15.</p>
+    <div class="keys" id="cardKeys">MOUSE / TOUCH DRAG &nbsp;·&nbsp; SPACE FIRE &nbsp;·&nbsp; P PAUSE</div>
     <div class="big" id="cardMsg">Best: <b>0</b></div>
-    <button id="startBtn">START</button>
+    <button id="startBtn">▶ PLAY</button>
+  </div>
+</div>
+<div id="pauseOverlay">
+  <div id="pauseCard">
+    <h2>PAUSED</h2>
+    <p>Press P or tap to resume</p>
   </div>
 </div>
 <footer><a href="https://pennypenguinapp-beep.github.io/" target="_blank" rel="noopener">LaunchTower &rarr;</a></footer>
@@ -263,6 +304,41 @@
   var startBtn = document.getElementById('startBtn');
   var toast = document.getElementById('toast');
   var toastTimer = null;
+  var pauseOverlay = document.getElementById('pauseOverlay');
+  var cardTitle = document.getElementById('cardTitle');
+  var cardSub = document.getElementById('cardSub');
+  var cardKeys = document.getElementById('cardKeys');
+
+  // ---- WebAudio sound cues ----
+  var audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function beep(freq, dur, type, vol, when) {
+    if (!audioCtx) return;
+    try {
+      var t0 = audioCtx.currentTime + (when || 0);
+      var o = audioCtx.createOscillator();
+      var g = audioCtx.createGain();
+      o.type = type || 'square';
+      o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(vol || 0.08, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch(e) {}
+  }
+  function sfxHit(pts) {
+    ensureAudio();
+    if (pts === 50) { beep(660, .08, 'square', .09); beep(880, .1, 'square', .09, .07); beep(1320, .14, 'square', .08, .15); }
+    else if (pts === 30) { beep(520, .08, 'square', .08); beep(780, .1, 'square', .07, .07); }
+    else if (pts > 0) { beep(440, .09, 'square', .07); }
+    else { beep(160, .16, 'sawtooth', .06); }
+  }
+  function sfxFire() { ensureAudio(); beep(300, .06, 'triangle', .05); }
 
   function showToast(text, cls) {
     toast.textContent = text;
@@ -298,10 +374,12 @@
     state.trail = [];
     state.particles = [];
     state.floaters = [];
+    state.paused = false;
     newTarget();
     newWind();
     updateHUD();
     overlay.classList.add('hidden');
+    pauseOverlay.classList.remove('show');
     fireBtn.textContent = 'NEW ROUND';
     fireBtn.disabled = false;
   }
@@ -314,11 +392,28 @@
       try { localStorage.setItem('pixelArcheryBest', String(state.best)); } catch(e) {}
     }
     updateHUD();
-    cardMsg.innerHTML = 'You scored <b>' + state.score + '</b> pts' +
+    cardTitle.textContent = 'ROUND OVER';
+    cardSub.innerHTML = '10 arrows loosed. Bullseye 50 · ring 30 · outer 15.';
+    cardMsg.innerHTML = 'Score: <b>' + state.score + '</b> pts' +
       (isBest ? ' — NEW BEST!' : '') + '<br>Best: <b>' + state.best + '</b>';
-    startBtn.textContent = 'PLAY AGAIN';
+    startBtn.textContent = '▶ PLAY AGAIN';
     overlay.classList.remove('hidden');
     fireBtn.textContent = 'NEW ROUND';
+  }
+
+  function showStart() {
+    cardTitle.textContent = 'PIXEL ARCHERY';
+    cardSub.innerHTML = 'Drag from the archer to draw the bow — longer drag = more power.<br>' +
+      'Watch the wind, it bends every arrow in flight.<br>' +
+      '10 arrows per round. Bullseye 50 · ring 30 · outer 15.';
+    cardMsg.innerHTML = 'Best: <b>' + state.best + '</b>';
+    startBtn.textContent = '▶ PLAY';
+  }
+
+  function setPaused(p) {
+    if (state.phase === 'done') return;
+    state.paused = p;
+    pauseOverlay.classList.toggle('show', p);
   }
 
   function spawnBurst(x, y, color, n) {
@@ -342,6 +437,7 @@
     state.arrow = { x: ARCHER_X + 14, y: ARCHER_Y - 6, vx: vx, vy: vy, rot: Math.atan2(vy, vx) };
     state.trail = [];
     state.phase = 'flying';
+    sfxFire();
   }
 
   function arrowHit() {
@@ -364,9 +460,11 @@
       spawnBurst(a.x, a.y, col, pts === 50 ? 26 : 14);
       addFloater(a.x, a.y - 14, '+' + pts, col);
       showToast(pts === 50 ? 'BULLSEYE +50' : '+' + pts, pts === 50 ? 'bull' : 'good');
+      sfxHit(pts);
     } else {
       spawnBurst(a.x, a.y, '#5a6478', 8);
       showToast('MISS', 'miss');
+      sfxHit(0);
     }
     state.arrow = null;
     state.trail = [];
@@ -398,9 +496,11 @@
   }
 
   function onDown(ev) {
+    if (state.paused) { setPaused(false); return; }
     if (state.phase !== 'idle' || state.arrows <= 0) return;
     var p = canvasPos(ev);
     if (!canAim(p)) return;
+    ensureAudio();
     state.phase = 'aiming';
     state.aim = p;
     ev.preventDefault();
@@ -433,11 +533,35 @@
   canvas.addEventListener('touchmove', onMove, { passive: false });
   canvas.addEventListener('touchend', onUp, { passive: false });
 
-  fireBtn.addEventListener('click', function(){ newRound(); });
-  startBtn.addEventListener('click', function(){ newRound(); });
+  fireBtn.addEventListener('click', function(){ ensureAudio(); newRound(); });
+  startBtn.addEventListener('click', function(){ ensureAudio(); newRound(); });
+  pauseOverlay.addEventListener('click', function(){ setPaused(false); });
+
+  // keyboard: Space = quick fire at default power, P/Esc = pause
+  window.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      if (state.phase === 'idle' && !state.paused) {
+        e.preventDefault();
+        ensureAudio();
+        fireArrow(7.5, -6.5);
+      }
+    }
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+      if (state.phase !== 'done' && state.arrows > 0) {
+        e.preventDefault();
+        setPaused(!state.paused);
+      }
+    }
+  });
+
+  // auto-pause when tab hidden
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden && state.phase !== 'done') setPaused(true);
+  });
 
   // ---- update ----
   function update() {
+    if (state.paused) return;
     if (state.phase === 'flying' && state.arrow) {
       var a = state.arrow;
       a.vx += state.wind;
@@ -694,12 +818,13 @@
     requestAnimationFrame(loop);
   }
 
-  // fit canvas to container
+  // fit canvas to container (letterboxed, DPR-aware)
   function fit() {
     var wrap = document.getElementById('canvasWrap');
-    var availW = wrap.clientWidth - 16;
-    var availH = wrap.clientHeight - 8;
-    var scale = Math.min(availW / W, availH / H, 1);
+    var availW = Math.max(50, wrap.clientWidth - 16);
+    var availH = Math.max(50, wrap.clientHeight - 8);
+    var scale = Math.min(availW / W, availH / H);
+    scale = Math.max(0.35, Math.min(scale, 1.4));
     canvas.style.width = (W * scale) + 'px';
     canvas.style.height = (H * scale) + 'px';
   }
@@ -707,7 +832,7 @@
   fit();
 
   elBest.textContent = state.best;
-  cardMsg.innerHTML = 'Best: <b>' + state.best + '</b>';
+  showStart();
   loop();
 })();
 </script>
