@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Pixel Archery</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --panel: #161a22;
+    --panel2: #1d222d;
+    --accent: #ffb347;
+    --accent2: #4fd1c5;
+    --text: #e8ecf1;
+    --muted: #8b94a3;
+    --good: #6ee7a0;
+    --bad: #ff6b6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #wrap {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #topbar {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid #2a3140;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .stat b { color: var(--accent); }
+  #score b { color: var(--accent2); }
+  #best b { color: var(--good); }
+  #canvasWrap {
+    flex: 1;
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    min-height: 0;
+  }
+  canvas {
+    background: linear-gradient(180deg, #10131a 0%, #141926 60%, #1a2130 100%);
+    border: 1px solid #2a3140;
+    border-radius: 8px;
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    touch-action: none;
+  }
+  #bottombar {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px 10px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  #hint {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  #fireBtn {
+    background: var(--accent);
+    color: #1a1206;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #b57a2a;
+    transition: transform .05s;
+  }
+  #fireBtn:active { transform: translateY(2px); box-shadow: 0 1px 0 #b57a2a; }
+  #fireBtn:disabled { background: #4a4436; color: #8a8270; box-shadow: none; cursor: default; }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,12,18,.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  #overlay.hidden { display: none; }
+  #card {
+    background: var(--panel);
+    border: 1px solid #2f3849;
+    border-radius: 10px;
+    padding: 26px 30px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  }
+  #card h1 {
+    font-size: 22px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  #card p {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  #card .big {
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 18px;
+    line-height: 1.8;
+  }
+  #card .big b { color: var(--accent2); }
+  #card button {
+    background: var(--accent2);
+    color: #06201d;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 26px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #2f8f85;
+  }
+  #card button:active { transform: translateY(2px); box-shadow: 0 1px 0 #2f8f85; }
+  footer {
+    position: fixed;
+    bottom: 2px;
+    right: 6px;
+    z-index: 5;
+  }
+  footer a {
+    color: #4a5468;
+    font-size: 10px;
+    text-decoration: none;
+    letter-spacing: 1px;
+  }
+  footer a:hover { color: var(--accent); }
+  #toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel2);
+    border: 1px solid #2f3849;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 14px;
+    letter-spacing: 1px;
+    z-index: 8;
+    opacity: 0;
+    transition: opacity .25s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.bull { color: var(--accent); border-color: var(--accent); }
+  #toast.good { color: var(--good); }
+  #toast.miss { color: var(--bad); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="topbar">
+    <div class="stat" id="arrows">ARROWS <b>10</b></div>
+    <div class="stat" id="score">SCORE <b>0</b></div>
+    <div class="stat" id="wind">WIND <b>0</b></div>
+    <div class="stat" id="best">BEST <b>0</b></div>
+  </div>
+  <div id="canvasWrap"><canvas id="c"></canvas></div>
+  <div id="bottombar">
+    <div id="hint">DRAG FROM THE ARCHER TO AIM &amp; SET POWER, RELEASE TO FIRE</div>
+    <button id="fireBtn">NEW ROUND</button>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="overlay">
+  <div id="card">
+    <h1>PIXEL ARCHERY</h1>
+    <p>Drag from the archer to draw the bow. Longer drag = more power.<br>
+    Watch the wind — it bends every arrow in flight.<br>
+    10 arrows per round. Bullseye = 50 pts, ring = 30, outer = 15.</p>
+    <div class="big" id="cardMsg">Best: <b>0</b></div>
+    <button id="startBtn">START</button>
+  </div>
+</div>
+<footer><a href="https://pennypenguinapp-beep.github.io/" target="_blank" rel="noopener">LaunchTower &rarr;</a></footer>
+<script>
+(function(){
+  "use strict";
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var W = 900, H = 480;
+  canvas.width = W; canvas.height = H;
+
+  var GROUND_Y = H - 56;
+  var ARCHER_X = 70;
+  var ARCHER_Y = GROUND_Y - 46;
+  var ARROWS_PER_ROUND = 10;
+  var GRAVITY = 0.16;
+  var MAX_PULL = 150;
+  var POWER_K = 0.155;
+
+  var state = {
+    phase: 'idle', // idle | aiming | flying | done
+    arrows: ARROWS_PER_ROUND,
+    score: 0,
+    best: 0,
+    wind: 0,
+    target: null,
+    arrow: null,
+    trail: [],
+    aim: null,
+    particles: [],
+    floaters: []
+  };
+
+  try { state.best = parseInt(localStorage.getItem('pixelArcheryBest') || '0', 10) || 0; } catch(e) {}
+
+  var elArrows = document.querySelector('#arrows b');
+  var elScore = document.querySelector('#score b');
+  var elWind = document.querySelector('#wind b');
+  var elBest = document.querySelector('#best b');
+  var fireBtn = document.getElementById('fireBtn');
+  var overlay = document.getElementById('overlay');
+  var cardMsg = document.getElementById('cardMsg');
+  var startBtn = document.getElementById('startBtn');
+  var toast = document.getElementById('toast');
+  var toastTimer = null;
+
+  function showToast(text, cls) {
+    toast.textContent = text;
+    toast.className = 'show ' + (cls || '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toast.className = ''; }, 1400);
+  }
+
+  function updateHUD() {
+    elArrows.textContent = state.arrows;
+    elScore.textContent = state.score;
+    elBest.textContent = state.best;
+    var w = Math.round(state.wind * 100);
+    elWind.textContent = (w > 0 ? '+' : '') + w;
+  }
+
+  function newTarget() {
+    var minD = 340, maxD = 780;
+    var x = minD + Math.random() * (maxD - minD);
+    var r = 34 + Math.random() * 22;
+    state.target = { x: x, y: GROUND_Y - r - 6, r: r };
+  }
+
+  function newWind() {
+    state.wind = (Math.random() * 2 - 1) * 0.055; // -0.055..0.055 px/frame^2
+  }
+
+  function newRound() {
+    state.phase = 'idle';
+    state.arrows = ARROWS_PER_ROUND;
+    state.score = 0;
+    state.arrow = null;
+    state.trail = [];
+    state.particles = [];
+    state.floaters = [];
+    newTarget();
+    newWind();
+    updateHUD();
+    overlay.classList.add('hidden');
+    fireBtn.textContent = 'NEW ROUND';
+    fireBtn.disabled = false;
+  }
+
+  function endRound() {
+    state.phase = 'done';
+    var isBest = state.score > state.best;
+    if (isBest) {
+      state.best = state.score;
+      try { localStorage.setItem('pixelArcheryBest', String(state.best)); } catch(e) {}
+    }
+    updateHUD();
+    cardMsg.innerHTML = 'You scored <b>' + state.score + '</b> pts' +
+      (isBest ? ' — NEW BEST!' : '') + '<br>Best: <b>' + state.best + '</b>';
+    startBtn.textContent = 'PLAY AGAIN';
+    overlay.classList.remove('hidden');
+    fireBtn.textContent = 'NEW ROUND';
+  }
+
+  function spawnBurst(x, y, color, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var s = 1 + Math.random() * 3.5;
+      state.particles.push({
+        x: x, y: y,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1,
+        life: 24 + Math.random() * 18,
+        color: color
+      });
+    }
+  }
+
+  function addFloater(x, y, text, color) {
+    state.floaters.push({ x: x, y: y, text: text, color: color, life: 60 });
+  }
+
+  function fireArrow(vx, vy) {
+    state.arrow = { x: ARCHER_X + 14, y: ARCHER_Y - 6, vx: vx, vy: vy, rot: Math.atan2(vy, vx) };
+    state.trail = [];
+    state.phase = 'flying';
+  }
+
+  function arrowHit() {
+    var a = state.arrow, t = state.target;
+    var dx = a.x - t.x, dy = a.y - t.y;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if (d < t.r * 0.28) return 50;
+    if (d < t.r * 0.62) return 30;
+    if (d < t.r) return 15;
+    return 0;
+  }
+
+  function onArrowEnd() {
+    var a = state.arrow;
+    var pts = arrowHit();
+    state.arrows--;
+    if (pts > 0) {
+      state.score += pts;
+      var col = pts === 50 ? '#ffb347' : (pts === 30 ? '#6ee7a0' : '#4fd1c5');
+      spawnBurst(a.x, a.y, col, pts === 50 ? 26 : 14);
+      addFloater(a.x, a.y - 14, '+' + pts, col);
+      showToast(pts === 50 ? 'BULLSEYE +50' : '+' + pts, pts === 50 ? 'bull' : 'good');
+    } else {
+      spawnBurst(a.x, a.y, '#5a6478', 8);
+      showToast('MISS', 'miss');
+    }
+    state.arrow = null;
+    state.trail = [];
+    updateHUD();
+    if (state.arrows <= 0) {
+      setTimeout(endRound, 500);
+    } else {
+      state.phase = 'idle';
+      newTarget();
+      newWind();
+      updateHUD();
+    }
+  }
+
+  // ---- input ----
+  function canvasPos(ev) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = (ev.touches ? ev.touches[0].clientX : ev.clientX);
+    var cy = (ev.touches ? ev.touches[0].clientY : ev.clientY);
+    return {
+      x: (cx - rect.left) * (W / rect.width),
+      y: (cy - rect.top) * (H / rect.height)
+    };
+  }
+
+  function canAim(p) {
+    var dx = p.x - ARCHER_X, dy = p.y - ARCHER_Y;
+    return dx*dx + dy*dy < 90*90;
+  }
+
+  function onDown(ev) {
+    if (state.phase !== 'idle' || state.arrows <= 0) return;
+    var p = canvasPos(ev);
+    if (!canAim(p)) return;
+    state.phase = 'aiming';
+    state.aim = p;
+    ev.preventDefault();
+  }
+
+  function onMove(ev) {
+    if (state.phase !== 'aiming') return;
+    state.aim = canvasPos(ev);
+    ev.preventDefault();
+  }
+
+  function onUp(ev) {
+    if (state.phase !== 'aiming') return;
+    var p = state.aim;
+    var dx = ARCHER_X - p.x, dy = ARCHER_Y - p.y;
+    var dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 12) { state.phase = 'idle'; state.aim = null; return; }
+    var pull = Math.min(dist, MAX_PULL);
+    var speed = pull * POWER_K;
+    var nx = dx / dist, ny = dy / dist;
+    fireArrow(nx * speed, ny * speed);
+    state.aim = null;
+    ev.preventDefault();
+  }
+
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  canvas.addEventListener('touchmove', onMove, { passive: false });
+  canvas.addEventListener('touchend', onUp, { passive: false });
+
+  fireBtn.addEventListener('click', function(){ newRound(); });
+  startBtn.addEventListener('click', function(){ newRound(); });
+
+  // ---- update ----
+  function update() {
+    if (state.phase === 'flying' && state.arrow) {
+      var a = state.arrow;
+      a.vx += state.wind;
+      a.vy += GRAVITY;
+      a.x += a.vx;
+      a.y += a.vy;
+      a.rot = Math.atan2(a.vy, a.vx);
+      state.trail.push({ x: a.x, y: a.y });
+      if (state.trail.length > 22) state.trail.shift();
+
+      // hit target
+      var t = state.target;
+      var dx = a.x - t.x, dy = a.y - t.y;
+      if (dx*dx + dy*dy < t.r * t.r * 0.9) {
+        onArrowEnd();
+        return;
+      }
+      // ground
+      if (a.y >= GROUND_Y) {
+        a.y = GROUND_Y;
+        onArrowEnd();
+        return;
+      }
+      // off screen
+      if (a.x > W + 60 || a.x < -60 || a.y > H + 60) {
+        onArrowEnd();
+        return;
+      }
+    }
+
+    for (var i = state.particles.length - 1; i >= 0; i--) {
+      var p = state.particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+      if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    for (var j = state.floaters.length - 1; j >= 0; j--) {
+      var f = state.floaters[j];
+      f.y -= 0.7; f.life--;
+      if (f.life <= 0) state.floaters.splice(j, 1);
+    }
+  }
+
+  // ---- draw ----
+  function px(x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.round(x), Math.round(y), w, h);
+  }
+
+  function drawGround() {
+    px(0, GROUND_Y, W, H - GROUND_Y, '#1c2333');
+    px(0, GROUND_Y, W, 3, '#2c3650');
+    // grass tufts
+    for (var x = 10; x < W; x += 34) {
+      px(x, GROUND_Y - 4, 3, 4, '#2f4a3a');
+      px(x + 8, GROUND_Y - 3, 2, 3, '#2a4234');
+    }
+    // stars
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    for (var s = 0; s < 40; s++) {
+      var sx = (s * 137 + 53) % W;
+      var sy = (s * 71 + 17) % (GROUND_Y - 60);
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+
+  function drawTarget() {
+    var t = state.target;
+    if (!t) return;
+    // stand
+    px(t.x - 3, t.y + t.r, 6, GROUND_Y - (t.y + t.r), '#3a2f22');
+    // rings
+    var rings = [
+      { f: 1.0, c: '#e8ecf1' },
+      { f: 0.62, c: '#ff6b6b' },
+      { f: 0.28, c: '#ffb347' }
+    ];
+    for (var i = 0; i < rings.length; i++) {
+      var r = t.r * rings[i].f;
+      ctx.fillStyle = rings[i].c;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // center dot
+    ctx.fillStyle = '#1a1206';
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawArcher() {
+    var x = ARCHER_X, y = ARCHER_Y;
+    // body
+    px(x - 6, y - 10, 12, 22, '#3b4a6b');
+    // head
+    px(x - 5, y - 22, 10, 10, '#e8b88a');
+    // hair
+    px(x - 5, y - 24, 10, 4, '#5a3a22');
+    // legs
+    px(x - 6, y + 12, 5, 14, '#2a3348');
+    px(x + 1, y + 12, 5, 14, '#2a3348');
+    // bow
+    ctx.strokeStyle = '#c98a3a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x + 12, y - 4, 16, -Math.PI * 0.42, Math.PI * 0.42);
+    ctx.stroke();
+    // string
+    ctx.strokeStyle = '#8b94a3';
+    ctx.lineWidth = 1;
+    var bx = x + 12 + 16 * Math.cos(Math.PI * 0.42);
+    var by1 = y - 4 - 16 * Math.sin(Math.PI * 0.42);
+    var by2 = y - 4 + 16 * Math.sin(Math.PI * 0.42);
+    ctx.beginPath();
+    ctx.moveTo(bx, by1);
+    ctx.lineTo(bx, by2);
+    ctx.stroke();
+  }
+
+  function drawAim() {
+    if (state.phase !== 'aiming' || !state.aim) return;
+    var p = state.aim;
+    var dx = ARCHER_X - p.x, dy = ARCHER_Y - p.y;
+    var dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 2) return;
+    var pull = Math.min(dist, MAX_PULL);
+    var power = Math.round((pull / MAX_PULL) * 100);
+    var nx = dx / dist, ny = dy / dist;
+
+    // dotted trajectory preview (no wind, short)
+    ctx.fillStyle = 'rgba(255,179,71,0.5)';
+    var speed = pull * POWER_K;
+    var vx = nx * speed, vy = ny * speed;
+    var sx = ARCHER_X + 14, sy = ARCHER_Y - 6;
+    for (var i = 1; i <= 14; i++) {
+      var t = i * 3;
+      var pxp = sx + vx * t;
+      var pyp = sy + vy * t + 0.5 * GRAVITY * t * t;
+      if (pyp > GROUND_Y) break;
+      ctx.fillRect(pxp - 2, pyp - 2, 4, 4);
+    }
+
+    // power bar
+    var bw = 120, bh = 10;
+    var bx0 = ARCHER_X - bw/2, by0 = ARCHER_Y - 52;
+    px(bx0 - 2, by0 - 2, bw + 4, bh + 4, '#0d0f14');
+    px(bx0, by0, bw, bh, '#2a3140');
+    var pw = bw * (pull / MAX_PULL);
+    var col = power > 75 ? '#ff6b6b' : (power > 40 ? '#ffb347' : '#6ee7a0');
+    px(bx0, by0, pw, bh, col);
+    ctx.fillStyle = '#e8ecf1';
+    ctx.font = '11px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('POWER ' + power + '%', ARCHER_X, by0 - 8);
+    ctx.textAlign = 'left';
+  }
+
+  function drawArrow() {
+    if (state.phase !== 'flying' || !state.arrow) return;
+    // trail
+    for (var i = 0; i < state.trail.length; i++) {
+      var tp = state.trail[i];
+      var alpha = (i + 1) / state.trail.length * 0.35;
+      ctx.fillStyle = 'rgba(232,236,241,' + alpha + ')';
+      ctx.fillRect(tp.x - 1.5, tp.y - 1.5, 3, 3);
+    }
+    var a = state.arrow;
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.rot);
+    // shaft
+    ctx.fillStyle = '#c9a06a';
+    ctx.fillRect(-14, -1.5, 24, 3);
+    // head
+    ctx.fillStyle = '#e8ecf1';
+    ctx.beginPath();
+    ctx.moveTo(10, -4);
+    ctx.lineTo(16, 0);
+    ctx.lineTo(10, 4);
+    ctx.closePath();
+    ctx.fill();
+    // fletching
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillRect(-16, -3, 5, 2);
+    ctx.fillRect(-16, 1, 5, 2);
+    ctx.restore();
+  }
+
+  function drawWind() {
+    var w = state.wind;
+    if (Math.abs(w) < 0.002) return;
+    var dir = w > 0 ? 1 : -1;
+    var mag = Math.min(1, Math.abs(w) / 0.055);
+    var cx = W / 2, cy = 26;
+    ctx.strokeStyle = 'rgba(79,209,197,0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 30 * dir, cy);
+    ctx.lineTo(cx + 30 * dir * mag, cy);
+    ctx.stroke();
+    // arrowhead
+    ctx.fillStyle = 'rgba(79,209,197,0.7)';
+    ctx.beginPath();
+    ctx.moveTo(cx + 30 * dir * mag, cy);
+    ctx.lineTo(cx + (30 - 8) * dir * mag, cy - 5);
+    ctx.lineTo(cx + (30 - 8) * dir * mag, cy + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(139,148,163,0.8)';
+    ctx.font = '10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('WIND', cx, cy + 16);
+    ctx.textAlign = 'left';
+  }
+
+  function drawParticles() {
+    for (var i = 0; i < state.particles.length; i++) {
+      var p = state.particles[i];
+      ctx.globalAlpha = Math.min(1, p.life / 20);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFloaters() {
+    ctx.font = 'bold 16px Courier New';
+    ctx.textAlign = 'center';
+    for (var i = 0; i < state.floaters.length; i++) {
+      var f = state.floaters[i];
+      ctx.globalAlpha = Math.min(1, f.life / 30);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    drawGround();
+    drawTarget();
+    drawArcher();
+    drawAim();
+    drawArrow();
+    drawParticles();
+    drawFloaters();
+    drawWind();
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // fit canvas to container
+  function fit() {
+    var wrap = document.getElementById('canvasWrap');
+    var availW = wrap.clientWidth - 16;
+    var availH = wrap.clientHeight - 8;
+    var scale = Math.min(availW / W, availH / H, 1);
+    canvas.style.width = (W * scale) + 'px';
+    canvas.style.height = (H * scale) + 'px';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  elBest.textContent = state.best;
+  cardMsg.innerHTML = 'Best: <b>' + state.best + '</b>';
+  loop();
+})();
+</script>
+</body>
+</html>
